@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Movie Catalog</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 
   :root {
@@ -368,7 +369,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   fetch(GITHUB_XLSX_URL)
     .then(r => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + r.statusText);
       return r.arrayBuffer();
     })
     .then(buf => {
@@ -378,10 +379,10 @@ window.addEventListener('DOMContentLoaded', () => {
       processData(rows);
     })
     .catch(err => {
-      // Fallback to file picker if fetch fails
       if (jsStatus) jsStatus.textContent = '✅ Ready — select your file below.';
+      if (jsStatus) jsStatus.style.color = '#f87171';
       if (hint) hint.innerHTML =
-        'Could not auto-load. Select <strong>MovieCatalog.xlsx</strong> or <strong>MovieCatalog.csv</strong> manually.';
+        `<span style="color:#f87171">Auto-load failed: <b>${err.message}</b></span><br>Select <strong>MovieCatalog.xlsx</strong> manually.`;
     });
 });
 
@@ -909,7 +910,5 @@ if (jsStatus) jsStatus.textContent = '✅ Ready — select your CSV file above.'
 
 </script>
 
-<!-- SheetJS loaded async at bottom so it never blocks page render/JS execution -->
-<script async src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </body>
 </html>
