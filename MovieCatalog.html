@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Movie Catalog</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Courier+Prime:wght@400;700&display=swap');
 
   :root {
     --bg:      #0d0d0f;
@@ -62,8 +60,11 @@
     font-size: 13px; color: var(--muted);
     background: transparent; border: 1px solid var(--border);
     border-radius: 6px; padding: 5px 10px;
-    cursor: pointer; display: none;
+    cursor: pointer; visibility: hidden; width: 0; height: 0; overflow: hidden;
     font-family: 'Inter', sans-serif; letter-spacing: .5px;
+  }
+  #file-input.visible {
+    visibility: visible; width: auto; height: auto; overflow: visible;
   }
   #file-input:hover { border-color: var(--accent); color: var(--accent); }
   /* Main load input */
@@ -264,9 +265,9 @@
   ::-webkit-scrollbar-thumb { background: var(--border); }
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 </style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Courier+Prime:wght@400;700&display=swap" media="print" onload="this.media='all'">
 </head>
 <body>
-
 <header>
   <div class="logo">Movie Catalog<span>Personal Collection</span></div>
   <div class="header-right">
@@ -290,6 +291,7 @@
   <div id="manual-load" style="display:flex; flex-direction:column; align-items:center; gap:16px;">
     <h2>Load Your Collection</h2>
     <p id="manual-hint">Select your catalog file below.</p>
+    <p id="js-status" style="font-size:12px;color:#6b6b7a;">⏳ Initialising…</p>
     <input type="file" id="file-input-drop" accept=".xlsx,.xls,.csv" />
   </div>
 </div>
@@ -356,42 +358,49 @@ function expectedXlsxName() {
   return base + '.xlsx';
 }
 
-// ── Auto-load on startup ──────────────────────────────────────────────────────
+// ── GitHub Pages auto-fetch ───────────────────────────────────────────────────
+const GITHUB_XLSX_URL = 'https://aaranddeeman.github.io/movie-catalog/MovieCatalog.xlsx';
+
 window.addEventListener('DOMContentLoaded', () => {
-  const xlsxName = expectedXlsxName();
-  const csvName  = xlsxName.replace(/\.xlsx$/i, '.csv');
-  document.getElementById('manual-hint').innerHTML =
-    `Select <strong>${xlsxName}</strong> or <strong>${csvName}</strong> (CSV export from Numbers on iPad).`;
+  const hint = document.getElementById('manual-hint');
+  const jsStatus = document.getElementById('js-status');
+  if (jsStatus) jsStatus.textContent = '⏳ Loading catalog…';
+
+  fetch(GITHUB_XLSX_URL)
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    })
+    .then(buf => {
+      const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      processData(rows);
+    })
+    .catch(err => {
+      // Fallback to file picker if fetch fails
+      if (jsStatus) jsStatus.textContent = '✅ Ready — select your file below.';
+      if (hint) hint.innerHTML =
+        'Could not auto-load. Select <strong>MovieCatalog.xlsx</strong> or <strong>MovieCatalog.csv</strong> manually.';
+    });
 });
 
-// ── File inputs ───────────────────────────────────────────────────────────────
-['file-input', 'file-input-drop'].forEach(id => {
-  document.getElementById(id).addEventListener('change', e => {
-    const f = e.target.files[0];
-    if (f) readFile(f);
-    e.target.value = '';
+// ── File input wiring (manual fallback) ──────────────────────────────────────
+function wireFileInput(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', function(e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    readFile(f);
+    setTimeout(() => { el.value = ''; }, 500);
   });
-});
-
-// ── Global error catcher — shows on screen so iPad errors are visible ─────────
-window.onerror = (msg, src, line, col, err) => {
-  showError(`JS Error: ${msg} (line ${line})`);
-  return false;
-};
-window.onunhandledrejection = e => {
-  showError(`Unhandled promise: ${e.reason}`);
-};
-function showError(msg) {
-  let el = document.getElementById('err-banner');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'err-banner';
-    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c0392b;color:#fff;padding:12px 20px;font-size:13px;z-index:9999;white-space:pre-wrap;word-break:break-all;';
-    document.body.appendChild(el);
-  }
-  el.textContent = msg;
 }
 
+wireFileInput('file-input-drop');
+wireFileInput('file-input');
+
+;
 // ── Pure JS CSV parser (no library needed, handles quoted fields) ─────────────
 function parseCSV(text) {
   // Normalise line endings
@@ -436,35 +445,34 @@ function parseCSV(text) {
   return rows;
 }
 
-// ── Read file — handles .xlsx/.xls via SheetJS, .csv via built-in parser ──────
+// ── Read file ────────────────────────────────────────────────────────────────
 function readFile(file) {
   const name = (file.name || '').toLowerCase();
   const isCSV = name.endsWith('.csv');
   const reader = new FileReader();
 
   if (isCSV) {
-    reader.onerror = () => showError('FileReader failed reading CSV.');
+    reader.onerror = () => alert('Could not read CSV: ' + reader.error);
     reader.onload = e => {
       try {
         const text = e.target.result;
-        if (!text || !text.trim()) { showError('CSV file appears empty.'); return; }
+        if (!text || !text.trim()) { alert('CSV appears empty.'); return; }
         const rows = parseCSV(text);
-        if (!rows.length) { showError('CSV parsed 0 rows — check the file.'); return; }
+        if (!rows.length) { alert('CSV parsed 0 rows.'); return; }
         processData(rows);
-      } catch(err) { showError('CSV parse error: ' + err.message + '\n' + err.stack); }
+      } catch(err) { alert('CSV error: ' + err.message); }
     };
     reader.readAsText(file, 'UTF-8');
   } else {
-    reader.onerror = () => showError('FileReader failed reading spreadsheet.');
+    reader.onerror = () => alert('Could not read file: ' + reader.error);
     reader.onload = e => {
       try {
-        if (typeof XLSX === 'undefined') { showError('SheetJS library not loaded — check internet connection.'); return; }
         const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        if (!rows.length) { showError('Spreadsheet parsed 0 rows.'); return; }
+        if (!rows.length) { alert('Spreadsheet has 0 rows.'); return; }
         processData(rows);
-      } catch(err) { showError('Spreadsheet error: ' + err.message + '\n' + err.stack); }
+      } catch(err) { alert('XLSX error: ' + err.message); }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -475,10 +483,10 @@ function processData(rows) {
   try {
     _processData(rows);
   } catch(err) {
-    showError('processData error: ' + err.message + '\n' + err.stack);
-  }
+    }
 }
 function _processData(rows) {
+
   if (!rows.length) { alert('Spreadsheet appears empty.'); return; }
   const cols = Object.keys(rows[0]);
 
@@ -539,7 +547,7 @@ function _processData(rows) {
   // Show UI
   document.getElementById('drop-zone').style.display = 'none';
   document.getElementById('main-tabs').style.display = 'block';
-  document.getElementById('file-input').style.display = 'inline-block';
+  document.getElementById('file-input').classList.add('visible');
   const badge = document.getElementById('count-badge');
   badge.style.display = 'block';
   badge.innerHTML = `<b>${allMovies.length}</b> movies`;
@@ -548,7 +556,7 @@ function _processData(rows) {
   renderMovies();
   renderAudio();
   renderSet();
-} // end _processData
+  } // end _processData
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.main-tab').forEach(tab => {
@@ -894,6 +902,14 @@ function setupControls(tabKey, renderFn) {
 setupControls('movies', renderMovies);
 setupControls('audio',  renderAudio);
 setupControls('set',    renderSet);
+
+// ── Mark JS as running ────────────────────────────────────────────────────────
+const jsStatus = document.getElementById('js-status');
+if (jsStatus) jsStatus.textContent = '✅ Ready — select your CSV file above.';
+
 </script>
+
+<!-- SheetJS loaded async at bottom so it never blocks page render/JS execution -->
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </body>
 </html>
