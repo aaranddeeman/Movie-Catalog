@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movie Catalog</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Courier+Prime:wght@400;700&display=swap');
+
+  :root {
+    --bg:      #0d0d0f;
+    --surface: #15151a;
+    --surface2:#1c1c24;
+    --border:  #2a2a35;
+    --accent:  #e8c84a;
+    --text:    #e8e6e0;
+    --muted:   #6b6b7a;
+    --uhd:     #60a5fa;
+    --bd3d:    #a78bfa;
+    --bluray:  #34d399;
+    --dvd:     #fb923c;
+    --radius:  10px;
+    --card-h:  340px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 58px;
+    position: sticky; top: 0; z-index: 200;
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px; letter-spacing: 3px; color: var(--accent); line-height: 1;
+  }
+  .logo span {
+    color: var(--muted); font-size: 11px; letter-spacing: 1px;
+    display: block; font-family: 'Inter', sans-serif; font-weight: 300; margin-top: 1px;
+  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  #count-badge {
+    font-family: 'Courier Prime', monospace;
+    font-size: 13px; color: var(--muted); display: none;
+  }
+  #count-badge b { color: var(--accent); }
+  /* ↺ reload button in header — plain visible input styled to match */
+  #file-input {
+    font-size: 13px; color: var(--muted);
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px;
+    cursor: pointer; display: none;
+    font-family: 'Inter', sans-serif; letter-spacing: .5px;
+  }
+  #file-input:hover { border-color: var(--accent); color: var(--accent); }
+  /* Main load input */
+  #file-input-drop {
+    font-size: 17px; color: #000;
+    background: var(--accent); border: none;
+    border-radius: 6px; padding: 11px 28px;
+    cursor: pointer; font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 2px; margin-top: 4px;
+  }
+
+  /* ── LOAD ZONE ── */
+  #drop-zone {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: calc(100vh - 58px);
+    gap: 22px; padding: 40px;
+  }
+  .film-icon { width: 70px; height: 70px; opacity: 0.22; }
+  #drop-zone h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px; letter-spacing: 4px; color: var(--text);
+  }
+  #drop-zone p { color: var(--muted); font-weight: 300; text-align: center; max-width: 380px; line-height: 1.7; font-size: 15px; }
+  #auto-loading { display: none; }
+
+  /* ── MAIN TABS ── */
+  #main-tabs {
+    display: none; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px; position: sticky; top: 58px; z-index: 190;
+  }
+  .main-tab {
+    display: inline-block; padding: 13px 22px 11px;
+    font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 2px;
+    color: var(--muted); cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s; user-select: none;
+  }
+  .main-tab:hover { color: var(--text); }
+  .main-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── SUBTAB BAR ── */
+  .subtab-bar {
+    display: none; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 9px 28px; gap: 10px; align-items: center; flex-wrap: wrap;
+    position: sticky; top: 101px; z-index: 180;
+  }
+  .subtab-bar.visible { display: flex; }
+  .search-input {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 13px;
+    font-family: 'Inter', sans-serif; font-size: 14px;
+    width: 230px; outline: none; border-radius: 6px; transition: border-color .15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--muted); }
+  .format-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    padding: 4px 12px; border: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; letter-spacing: .5px; cursor: pointer;
+    background: transparent; color: var(--muted);
+    border-radius: 20px; transition: all .15s; text-transform: uppercase;
+  }
+  .pill:hover { color: var(--text); border-color: var(--muted); }
+  .pill.active { color: #000; border-color: transparent; }
+  .pill[data-f="all"].active   { background: var(--accent); }
+  .pill[data-f="UHD"].active   { background: var(--uhd); }
+  .pill[data-f="BluRay-3D"].active { background: var(--bd3d); }
+  .pill[data-f="BluRay"].active    { background: var(--bluray); }
+  .pill[data-f="DVD"].active       { background: var(--dvd); }
+
+  /* ── ALPHA NAV ── */
+  .alpha-nav {
+    display: none; padding: 7px 28px; gap: 3px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 152px; z-index: 170; background: var(--bg);
+  }
+  .alpha-nav.visible { display: flex; }
+  .alpha-link {
+    font-family: 'Courier Prime', monospace; font-size: 12px; font-weight: 700;
+    color: var(--muted); text-decoration: none;
+    padding: 2px 7px; border: 1px solid transparent; border-radius: 4px; transition: all .15s;
+  }
+  .alpha-link.has-items { color: var(--text); }
+  .alpha-link.has-items:hover { color: var(--accent); border-color: var(--accent); }
+  .alpha-link.empty { opacity: .18; pointer-events: none; }
+
+  /* ── CONTENT PANELS ── */
+  .tab-panel { display: none; padding: 20px 24px; }
+  .tab-panel.visible { display: block; }
+
+  /* ── GROUP GRID (left→right, then down, tightly packed) ── */
+  .groups-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 320px));
+    justify-content: start;
+    align-items: start;
+  }
+
+  /* ── GROUP CARD (fixed height + scroll) ── */
+  .group-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    height: var(--card-h);
+  }
+
+  /* Group heading */
+  .section-heading {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px; letter-spacing: 3px; color: var(--accent); line-height: 1;
+    padding: 10px 13px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 10px;
+    background: var(--surface2);
+    flex-shrink: 0;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .section-heading .scount {
+    font-family: 'Courier Prime', monospace; font-size: 11px;
+    font-weight: 400; color: var(--muted); letter-spacing: 1px;
+  }
+  .group-scroll {
+    overflow-y: auto; flex: 1;
+  }
+  .group-scroll::-webkit-scrollbar { width: 4px; }
+  .group-scroll::-webkit-scrollbar-track { background: transparent; }
+  .group-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .group-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ── MOVIE ROW ── */
+  .movie-row {
+    padding: 9px 13px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .movie-row:last-child { border-bottom: none; }
+  .movie-row:hover { background: var(--surface2); }
+
+  .movie-title {
+    font-weight: 600; font-size: 15px; line-height: 1.3; color: var(--text);
+  }
+  .movie-title em { font-style: normal; background: var(--accent); color: #000; padding: 0 2px; border-radius: 2px; }
+
+  /* Media formats row */
+  .formats-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .format-chip {
+    display: inline-flex; align-items: center;
+    padding: 2px 9px; font-size: 10px; font-weight: 700;
+    letter-spacing: .6px; text-transform: uppercase;
+    border: 1px solid; border-radius: 20px;
+  }
+  .chip-uhd    { color: var(--uhd);    border-color: rgba(96,165,250,.4);  background: rgba(96,165,250,.1); }
+  .chip-bd3d   { color: var(--bd3d);   border-color: rgba(167,139,250,.4); background: rgba(167,139,250,.1); }
+  .chip-bluray { color: var(--bluray); border-color: rgba(52,211,153,.4);  background: rgba(52,211,153,.1); }
+  .chip-dvd    { color: var(--dvd);    border-color: rgba(251,146,60,.4);  background: rgba(251,146,60,.1); }
+
+  /* Audio row */
+  .audio-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .audio-chip {
+    font-family: 'Courier Prime', monospace;
+    font-size: 11px;
+    color: var(--ac, var(--muted));
+    background: var(--ab, rgba(255,255,255,.04));
+    border: 1px solid var(--ae, var(--border));
+    padding: 1px 8px; border-radius: 20px;
+  }
+  /* Audio group heading accent stripe */
+  .audio-heading-bar {
+    display: block;
+    height: 3px;
+    background: var(--ah-color, var(--accent));
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+
+  /* Position tag */
+  .pos-tag {
+    font-family: 'Courier Prime', monospace;
+    font-size: 10px; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 3px;
+    align-self: flex-start;
+  }
+  .pos-tag::before { content: '📍'; font-size: 9px; }
+
+  /* ── NO RESULTS ── */
+  .no-results { display: none; text-align: center; padding: 60px 28px; color: var(--muted); }
+  .no-results h3 { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 3px; color: var(--text); margin-bottom: 8px; }
+  .no-results.visible { display: block; }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Movie Catalog<span>Personal Collection</span></div>
+  <div class="header-right">
+    <span id="count-badge"></span>
+    <input type="file" id="file-input" accept=".xlsx,.xls,.csv" title="↺ Load File" />
+  </div>
+</header>
+
+<!-- LOAD ZONE -->
+<div id="drop-zone">
+  <svg class="film-icon" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="14" width="72" height="52" rx="4" stroke="white" stroke-width="3"/>
+    <rect x="4" y="22" width="72" height="36" fill="white" fill-opacity="0.05" stroke="white" stroke-width="1.5"/>
+    <rect x="10" y="17" width="8" height="8" rx="1" fill="white" fill-opacity="0.4"/>
+    <rect x="10" y="55" width="8" height="8" rx="1" fill="white" fill-opacity="0.4"/>
+    <rect x="62" y="17" width="8" height="8" rx="1" fill="white" fill-opacity="0.4"/>
+    <rect x="62" y="55" width="8" height="8" rx="1" fill="white" fill-opacity="0.4"/>
+    <circle cx="40" cy="40" r="8" stroke="white" stroke-width="2" fill="none"/>
+    <circle cx="40" cy="40" r="2" fill="white" fill-opacity="0.6"/>
+  </svg>
+  <div id="manual-load" style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+    <h2>Load Your Collection</h2>
+    <p id="manual-hint">Select your catalog file below.</p>
+    <input type="file" id="file-input-drop" accept=".xlsx,.xls,.csv" />
+  </div>
+</div>
+
+<!-- MAIN TABS -->
+<div id="main-tabs">
+  <span class="main-tab active" data-tab="movies">🎬 All Movies</span>
+  <span class="main-tab" data-tab="audio">🎵 By Audio Format</span>
+  <span class="main-tab" data-tab="set">🗂️ By Set</span>
+</div>
+
+<!-- ══ TAB: ALL MOVIES ══ -->
+<div id="subtab-movies" class="subtab-bar">
+  <input type="text" class="search-input" id="search-movies" placeholder="Search movies…" />
+  <div class="format-pills">
+    <button class="pill active" data-f="all">All</button>
+    <button class="pill" data-f="UHD">4K UHD</button>
+    <button class="pill" data-f="BluRay-3D">Blu-ray 3D</button>
+    <button class="pill" data-f="BluRay">Blu-ray</button>
+    <button class="pill" data-f="DVD">DVD</button>
+  </div>
+</div>
+<div id="alpha-movies" class="alpha-nav"></div>
+<div id="panel-movies" class="tab-panel visible">
+  <div id="catalog-movies"></div>
+  <div id="nores-movies" class="no-results"><h3>No movies found</h3><p>Try a different search or filter.</p></div>
+</div>
+
+<!-- ══ TAB: BY AUDIO FORMAT ══ -->
+<div id="subtab-audio" class="subtab-bar">
+  <input type="text" class="search-input" id="search-audio" placeholder="Search movies…" />
+</div>
+<div id="alpha-audio" class="alpha-nav"></div>
+<div id="panel-audio" class="tab-panel">
+  <div id="catalog-audio"></div>
+  <div id="nores-audio" class="no-results"><h3>No movies found</h3><p>Try a different search.</p></div>
+</div>
+
+<!-- ══ TAB: BY SET ══ -->
+<div id="subtab-set" class="subtab-bar">
+  <input type="text" class="search-input" id="search-set" placeholder="Search movies or sets…" />
+</div>
+<div id="alpha-set" class="alpha-nav"></div>
+<div id="panel-set" class="tab-panel">
+  <div id="catalog-set"></div>
+  <div id="nores-set" class="no-results"><h3>No sets found</h3><p>Try a different search.</p></div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let allMovies = [];
+const state = {
+  movies: { filter: 'all', search: '' },
+  audio:  { search: '' },
+  set:    { search: '' },
+};
+let activeTab = 'movies';
+
+// ── Derive expected xlsx filename from the HTML filename ──────────────────────
+// e.g. "MovieCatalog.html" → "MovieCatalog.xlsx"
+function expectedXlsxName() {
+  const htmlFile = window.location.pathname.split('/').pop() || 'MovieCatalog.html';
+  const base = htmlFile.replace(/\.[^.]+$/, ''); // strip extension
+  return base + '.xlsx';
+}
+
+// ── Auto-load on startup ──────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const xlsxName = expectedXlsxName();
+  const csvName  = xlsxName.replace(/\.xlsx$/i, '.csv');
+  document.getElementById('manual-hint').innerHTML =
+    `Select <strong>${xlsxName}</strong> or <strong>${csvName}</strong> (CSV export from Numbers on iPad).`;
+});
+
+// ── File inputs ───────────────────────────────────────────────────────────────
+['file-input', 'file-input-drop'].forEach(id => {
+  document.getElementById(id).addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) readFile(f);
+    e.target.value = '';
+  });
+});
+
+// ── Global error catcher — shows on screen so iPad errors are visible ─────────
+window.onerror = (msg, src, line, col, err) => {
+  showError(`JS Error: ${msg} (line ${line})`);
+  return false;
+};
+window.onunhandledrejection = e => {
+  showError(`Unhandled promise: ${e.reason}`);
+};
+function showError(msg) {
+  let el = document.getElementById('err-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'err-banner';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c0392b;color:#fff;padding:12px 20px;font-size:13px;z-index:9999;white-space:pre-wrap;word-break:break-all;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+}
+
+// ── Pure JS CSV parser (no library needed, handles quoted fields) ─────────────
+function parseCSV(text) {
+  // Normalise line endings
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  if (!lines.length) return [];
+
+  function splitLine(line) {
+    const fields = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') { inQ = false; }
+        else { cur += ch; }
+      } else {
+        if (ch === '"') { inQ = true; }
+        else if (ch === ',') { fields.push(cur); cur = ''; }
+        else { cur += ch; }
+      }
+    }
+    fields.push(cur);
+    return fields;
+  }
+
+  // Find first non-empty line as header
+  let headerIdx = 0;
+  while (headerIdx < lines.length && !lines[headerIdx].trim()) headerIdx++;
+  if (headerIdx >= lines.length) return [];
+
+  const headers = splitLine(lines[headerIdx]).map(h => h.trim());
+  const rows = [];
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const vals = splitLine(line);
+    const row = {};
+    headers.forEach((h, j) => { row[h] = (vals[j] || '').trim(); });
+    rows.push(row);
+  }
+  return rows;
+}
+
+// ── Read file — handles .xlsx/.xls via SheetJS, .csv via built-in parser ──────
+function readFile(file) {
+  const name = (file.name || '').toLowerCase();
+  const isCSV = name.endsWith('.csv');
+  const reader = new FileReader();
+
+  if (isCSV) {
+    reader.onerror = () => showError('FileReader failed reading CSV.');
+    reader.onload = e => {
+      try {
+        const text = e.target.result;
+        if (!text || !text.trim()) { showError('CSV file appears empty.'); return; }
+        const rows = parseCSV(text);
+        if (!rows.length) { showError('CSV parsed 0 rows — check the file.'); return; }
+        processData(rows);
+      } catch(err) { showError('CSV parse error: ' + err.message + '\n' + err.stack); }
+    };
+    reader.readAsText(file, 'UTF-8');
+  } else {
+    reader.onerror = () => showError('FileReader failed reading spreadsheet.');
+    reader.onload = e => {
+      try {
+        if (typeof XLSX === 'undefined') { showError('SheetJS library not loaded — check internet connection.'); return; }
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        if (!rows.length) { showError('Spreadsheet parsed 0 rows.'); return; }
+        processData(rows);
+      } catch(err) { showError('Spreadsheet error: ' + err.message + '\n' + err.stack); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+// ── Process spreadsheet ───────────────────────────────────────────────────────
+function processData(rows) {
+  try {
+    _processData(rows);
+  } catch(err) {
+    showError('processData error: ' + err.message + '\n' + err.stack);
+  }
+}
+function _processData(rows) {
+  if (!rows.length) { alert('Spreadsheet appears empty.'); return; }
+  const cols = Object.keys(rows[0]);
+
+  function findCol(...patterns) {
+    return cols.find(c => patterns.some(p => c.toLowerCase().includes(p.toLowerCase()))) || null;
+  }
+
+  const titleCol    = findCol('title', 'movie', 'name', 'film');
+  const uhdCol      = findCol('uhd', '4k', 'ultra hd');
+  const bd3dCol     = findCol('3d', 'blu-ray 3', 'bluray 3', 'bd3d');
+  const blurayCol   = findCol('blu-ray', 'bluray', 'blu ray');
+  const dvdCol      = findCol('dvd');
+  const audioCol    = findCol('audio', 'sound', 'codec', 'atmos', 'dts', 'dolby');
+  const positionCol = cols.find(c => c.trim().toLowerCase() === 'position tag')
+                   || findCol('position tag', 'position', 'shelf');
+  const setCol      = cols.find(c => c.trim().toLowerCase() === 'set')
+                   || findCol('set', 'collection', 'series', 'franchise');
+  const formatCol   = (!uhdCol && !blurayCol && !dvdCol) ? findCol('format', 'media', 'type') : null;
+  const isTruthy    = v => { const s = String(v).trim().toLowerCase(); return s && s !== '0' && s !== 'false' && s !== 'no' && s !== 'n'; };
+
+  const movieMap = {};
+
+  rows.forEach(row => {
+    const rawTitle = titleCol ? String(row[titleCol] || '').trim() : '';
+    if (!rawTitle) return;
+
+    if (!movieMap[rawTitle]) movieMap[rawTitle] = { title: rawTitle, formats: [], audios: new Set(), position: '', set: '' };
+    const movie = movieMap[rawTitle];
+
+    if (positionCol && !movie.position) movie.position = String(row[positionCol] || '').trim();
+    if (setCol      && !movie.set)      movie.set      = String(row[setCol]      || '').trim();
+
+    const audio = audioCol ? String(row[audioCol] || '').trim() : '';
+    if (audio) movie.audios.add(audio);
+
+    function addFmt(type) {
+      if (!movie.formats.includes(type)) movie.formats.push(type);
+    }
+
+    if (formatCol) {
+      const val = String(row[formatCol] || '').toLowerCase();
+      if (val.includes('uhd') || val.includes('4k')) addFmt('UHD');
+      if (val.includes('3d'))                         addFmt('BluRay-3D');
+      if ((val.includes('blu') || val.includes('bluray')) && !val.includes('3d')) addFmt('BluRay');
+      if (val.includes('dvd'))                        addFmt('DVD');
+    } else {
+      if (uhdCol    && isTruthy(row[uhdCol]))    addFmt('UHD');
+      if (bd3dCol   && isTruthy(row[bd3dCol]))   addFmt('BluRay-3D');
+      if (blurayCol && isTruthy(row[blurayCol])) addFmt('BluRay');
+      if (dvdCol    && isTruthy(row[dvdCol]))    addFmt('DVD');
+    }
+  });
+
+  // Convert audios Set → sorted Array
+  allMovies = Object.values(movieMap).map(m => ({ ...m, audios: [...m.audios].sort() }))
+    .sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+
+  // Show UI
+  document.getElementById('drop-zone').style.display = 'none';
+  document.getElementById('main-tabs').style.display = 'block';
+  document.getElementById('file-input').style.display = 'inline-block';
+  const badge = document.getElementById('count-badge');
+  badge.style.display = 'block';
+  badge.innerHTML = `<b>${allMovies.length}</b> movies`;
+
+  showTab(activeTab);
+  renderMovies();
+  renderAudio();
+  renderSet();
+} // end _processData
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.main-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    activeTab = tab.dataset.tab;
+    document.querySelectorAll('.main-tab').forEach(t => t.classList.toggle('active', t === tab));
+    showTab(activeTab);
+  });
+});
+
+function showTab(tab) {
+  ['movies', 'audio', 'set'].forEach(t => {
+    const on = t === tab;
+    document.getElementById(`subtab-${t}`).classList.toggle('visible', on);
+    document.getElementById(`alpha-${t}`).classList.toggle('visible', on);
+    document.getElementById(`panel-${t}`).classList.toggle('visible', on);
+  });
+  // Reset badge to total when leaving Movies tab
+  if (tab !== 'movies' && allMovies.length) {
+    document.getElementById('count-badge').innerHTML = `<b>${allMovies.length}</b> movies`;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sortKey(title) {
+  return title.replace(/^(the|a|an)\s+/i, '').trim().toUpperCase();
+}
+function alphaBucket(title) {
+  const f = sortKey(title)[0];
+  return /[0-9]/.test(f) ? '#' : f.toUpperCase();
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function chipClass(t) {
+  return t==='UHD'?'chip-uhd': t==='BluRay-3D'?'chip-bd3d': t==='BluRay'?'chip-bluray':'chip-dvd';
+}
+function formatLabel(t) {
+  return t==='UHD'?'4K UHD': t==='BluRay-3D'?'Blu-ray 3D': t==='BluRay'?'Blu-ray':'DVD';
+}
+
+// ── Audio color palette — exact formats from MovieCatalog.xlsx only ───────────
+// Avoided: yellow (headers), blue/purple/green/orange (media format chips)
+// Groupings:
+//   Dolby Atmos                 → crimson       (unique, premium)
+//   Dolby TrueHD 7.1            → fuchsia       (lossless, high channel)
+//   Dolby TrueHD 5.1            → pink          (lossless, standard — near fuchsia)
+//   Dolby Digital 5.1           → amber-red     (lossy)
+//   Dolby Digital 5.1Ex         → coral         (lossy, close to above)
+//   Dolby Surround              → salmon        (lossy, close to above)
+//   DTS:X                       → cyan          (unique, premium DTS)
+//   DTS-HD MA 7.1               → teal          (lossless, high channel)
+//   DTS-HD MA 5.1               → lime          (lossless, standard — clearly different from cyan/teal)
+//   DTS 5.1                     → mint          (lossy DTS)
+const AUDIO_COLORS = {
+  'dolby atmos':         ['#fde68a', 'rgba(253,230,138,.13)', 'rgba(253,230,138,.55)'],  // warm amber
+  'dolby truehd 7.1':   ['#d946ef', 'rgba(217,70,239,.13)',  'rgba(217,70,239,.55)'],  // fuchsia
+  'dolby truehd 5.1':   ['#f472b6', 'rgba(244,114,182,.13)', 'rgba(244,114,182,.55)'], // pink
+  'dolby digital 5.1':  ['#ea580c', 'rgba(234,88,12,.13)',   'rgba(234,88,12,.55)'],   // amber-red
+  'dolby digital 5.1ex':['#f87171', 'rgba(248,113,113,.13)', 'rgba(248,113,113,.55)'], // coral
+  'dolby surround':     ['#fca5a5', 'rgba(252,165,165,.13)', 'rgba(252,165,165,.55)'], // salmon
+  'dts:x':              ['#22d3ee', 'rgba(34,211,238,.13)',   'rgba(34,211,238,.55)'],  // cyan
+  'dts-hd ma 7.1':      ['#0d9488', 'rgba(13,148,136,.13)',  'rgba(13,148,136,.55)'],  // teal
+  'dts-hd ma 5.1':      ['#84cc16', 'rgba(132,204,22,.13)',  'rgba(132,204,22,.55)'],  // lime
+  'dts 5.1':            ['#6ee7b7', 'rgba(110,231,183,.13)', 'rgba(110,231,183,.55)'], // mint
+};
+
+const AUDIO_PALETTE = []; // no fallback needed — all formats are explicitly listed
+
+const audioColorCache = {};
+function audioStyle(name) {
+  const key = name.toLowerCase().trim();
+  if (audioColorCache[key]) return audioColorCache[key];
+  const known = AUDIO_COLORS[key];
+  if (known) { audioColorCache[key] = known; return known; }
+  // Unlisted format — neutral grey, no color assigned yet
+  const fallback = ['#9ca3af', 'rgba(156,163,175,.1)', 'rgba(156,163,175,.4)'];
+  audioColorCache[key] = fallback;
+  return fallback;
+}
+
+// [color, bg, border] → inline style string for chip
+function audioChipStyle(name) {
+  const [color, bg, border] = audioStyle(name);
+  return `style="--ac:${color};--ab:${bg};--ae:${border}"`;
+}
+
+function audioHeadingColor(name) {
+  return audioStyle(name)[0];
+}
+
+// ── Movie row renderers ───────────────────────────────────────────────────────
+// Full card: title + formats + audio + optional position tag
+function movieRowFull(movie, q, groupBucket) {
+  let title = escHtml(movie.title);
+  if (q) {
+    const idx = movie.title.toLowerCase().indexOf(q);
+    if (idx !== -1) title =
+      escHtml(movie.title.slice(0, idx)) +
+      '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
+      escHtml(movie.title.slice(idx + q.length));
+  }
+
+  const fmtHtml = movie.formats.length
+    ? `<div class="formats-row">${movie.formats.map(f =>
+        `<span class="format-chip ${chipClass(f)}">${formatLabel(f)}</span>`).join('')}</div>`
+    : '';
+
+  const audioHtml = movie.audios.length
+    ? `<div class="audio-row">${movie.audios.map(a =>
+        `<span class="audio-chip" ${audioChipStyle(a)}>${escHtml(a)}</span>`).join('')}</div>`
+    : '';
+
+  // Show position tag only if it differs from the group's alpha bucket
+  let posHtml = '';
+  if (movie.position) {
+    const posFirst = movie.position.replace(/^(the|a|an)\s+/i,'').trim()[0];
+    const posBucket = posFirst ? (/[0-9]/.test(posFirst) ? '#' : posFirst.toUpperCase()) : '';
+    if (posBucket !== groupBucket) {
+      posHtml = `<div class="pos-tag">${escHtml(movie.position)}</div>`;
+    }
+  }
+
+  return `<div class="movie-row">
+    <div class="movie-title">${title}</div>
+    ${fmtHtml}${audioHtml}${posHtml}
+  </div>`;
+}
+
+// Audio tab: title only (no format/audio/position)
+function movieRowAudio(movie, q) {
+  let title = escHtml(movie.title);
+  if (q) {
+    const idx = movie.title.toLowerCase().indexOf(q);
+    if (idx !== -1) title =
+      escHtml(movie.title.slice(0, idx)) +
+      '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
+      escHtml(movie.title.slice(idx + q.length));
+  }
+  return `<div class="movie-row"><div class="movie-title">${title}</div></div>`;
+}
+
+// Set tab: title only
+function movieRowSet(movie, q) {
+  let title = escHtml(movie.title);
+  if (q) {
+    const idx = movie.title.toLowerCase().indexOf(q);
+    if (idx !== -1) title =
+      escHtml(movie.title.slice(0, idx)) +
+      '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
+      escHtml(movie.title.slice(idx + q.length));
+  }
+  return `<div class="movie-row"><div class="movie-title">${title}</div></div>`;
+}
+
+// ── Grid layout ───────────────────────────────────────────────────────────────
+// CSS auto-fill handles column count — just wrap in the grid div
+function renderGroupsGrid(container, groupHTMLs) {
+  container.innerHTML = '<div class="groups-grid">' + groupHTMLs.join('') + '</div>';
+}
+
+// ── Render: ALL MOVIES ────────────────────────────────────────────────────────
+function renderMovies() {
+  const { filter, search } = state.movies;
+  const q = search.toLowerCase();
+  const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+
+  const filtered = allMovies.filter(m =>
+    (!q || m.title.toLowerCase().includes(q)) &&
+    (filter === 'all' || m.formats.includes(filter))
+  );
+
+  // Update header count badge — show x/y when filtered, just y when showing all
+  const badge = document.getElementById('count-badge');
+  if (filter === 'all' && !q) {
+    badge.innerHTML = `<b>${allMovies.length}</b> movies`;
+  } else {
+    badge.innerHTML = `<b>${filtered.length}</b> / ${allMovies.length} movies`;
+  }
+
+  const groups = {};
+  filtered.forEach(m => {
+    const b = alphaBucket(m.title);
+    (groups[b] = groups[b] || []).push(m);
+  });
+
+  document.getElementById('alpha-movies').innerHTML = letters.map(l =>
+    `<a class="alpha-link ${groups[l] ? 'has-items' : 'empty'}" href="#am-${l}">${l}</a>`
+  ).join('');
+
+  const cat = document.getElementById('catalog-movies');
+  const nor = document.getElementById('nores-movies');
+  if (!filtered.length) { cat.innerHTML = ''; nor.classList.add('visible'); return; }
+  nor.classList.remove('visible');
+
+  const groupHTMLs = letters.filter(l => groups[l]).map(l => {
+    const movies = groups[l];
+    const rows = movies.map(m => movieRowFull(m, q, l)).join('');
+    return `<div class="group-section" id="am-${l}">
+      <div class="section-heading">${l}<span class="scount">${movies.length} film${movies.length!==1?'s':''}</span></div>
+      <div class="group-scroll">${rows}</div>
+    </div>`;
+  });
+
+  renderGroupsGrid(cat, groupHTMLs);
+}
+
+// ── Render: BY AUDIO FORMAT ───────────────────────────────────────────────────
+function renderAudio() {
+  const q = state.audio.search.toLowerCase();
+
+  const filtered = allMovies.filter(m =>
+    !q || m.title.toLowerCase().includes(q) || m.audios.some(a => a.toLowerCase().includes(q))
+  );
+
+  // Group by each audio format (a movie can appear in multiple groups)
+  const audioGroups = {};
+  filtered.forEach(m => {
+    const audios = m.audios.length ? m.audios : ['Unknown'];
+    audios.forEach(a => {
+      (audioGroups[a] = audioGroups[a] || []).push(m);
+    });
+  });
+
+  const audioKeys = Object.keys(audioGroups).sort((a, b) => {
+    if (a === 'Unknown') return 1;
+    if (b === 'Unknown') return -1;
+    return a.localeCompare(b);
+  });
+
+  // Alpha nav keyed on first letter of audio format name
+  const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+  const alphaHit = new Set(audioKeys.map(k => {
+    const f = k[0];
+    return f ? (/[0-9]/.test(f) ? '#' : f.toUpperCase()) : '';
+  }));
+  document.getElementById('alpha-audio').innerHTML = letters.map(l =>
+    `<a class="alpha-link ${alphaHit.has(l) ? 'has-items' : 'empty'}" href="#aa-${l}">${l}</a>`
+  ).join('');
+
+  const cat = document.getElementById('catalog-audio');
+  const nor = document.getElementById('nores-audio');
+  if (!audioKeys.length) { cat.innerHTML = ''; nor.classList.add('visible'); return; }
+  nor.classList.remove('visible');
+
+  // Bucket audio keys by first letter for anchors
+  const byLetter = {};
+  audioKeys.forEach(k => {
+    const f = k[0] || '';
+    const b = f ? (/[0-9]/.test(f) ? '#' : f.toUpperCase()) : '#';
+    (byLetter[b] = byLetter[b] || []).push(k);
+  });
+
+  const groupHTMLs = audioKeys.map((aName, i) => {
+    const movies = [...audioGroups[aName]].sort((a,b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+    const f = aName[0] || '';
+    const bucket = f ? (/[0-9]/.test(f) ? '#' : f.toUpperCase()) : '#';
+    const isFirstInBucket = audioKeys.findIndex(k => {
+      const kf = k[0] || ''; const kb = kf ? (/[0-9]/.test(kf) ? '#' : kf.toUpperCase()) : '#';
+      return kb === bucket;
+    }) === i;
+    const anchorAttr = isFirstInBucket ? ` id="aa-${bucket}"` : '';
+    const hColor = audioHeadingColor(aName);
+    const rows = movies.map(m => movieRowAudio(m, q)).join('');
+    return `<div class="group-section"${anchorAttr} style="border-top-color:${hColor}">
+      <div class="section-heading" style="font-size:17px;letter-spacing:1px;color:${hColor}">${escHtml(aName)}<span class="scount">${movies.length} film${movies.length!==1?'s':''}</span></div>
+      <div class="group-scroll">${rows}</div>
+    </div>`;
+  });
+
+  renderGroupsGrid(cat, groupHTMLs);
+}
+
+// ── Render: BY SET ────────────────────────────────────────────────────────────
+function renderSet() {
+  const q = state.set.search.toLowerCase();
+
+  // Only movies that belong to a named set
+  const filtered = allMovies.filter(m =>
+    m.set && (!q || m.title.toLowerCase().includes(q) || m.set.toLowerCase().includes(q))
+  );
+
+  const setGroups = {};
+  filtered.forEach(m => {
+    (setGroups[m.set] = setGroups[m.set] || []).push(m);
+  });
+
+  function setNumericKey(s) {
+    const m = s.match(/[-\s#](\d+)$/);
+    return m ? parseInt(m[1], 10) : Infinity;
+  }
+  const setKeys = Object.keys(setGroups).sort((a, b) => {
+    const na = setNumericKey(a), nb = setNumericKey(b);
+    if (na !== Infinity || nb !== Infinity) return na - nb;
+    return a.localeCompare(b);
+  });
+
+  const setNumbers = setKeys
+    .map(k => { const m = k.match(/[-\s#](\d+)$/); return m ? parseInt(m[1],10) : null; })
+    .filter(n => n !== null);
+  document.getElementById('alpha-set').innerHTML = setNumbers.length
+    ? setNumbers.map(n => `<a class="alpha-link has-items" href="#as-${n}">Set-${n}</a>`).join('')
+    : '<span style="color:var(--muted);font-size:11px;font-family:\'Courier Prime\',monospace;padding:2px 8px;">No numbered sets</span>';
+
+  const cat = document.getElementById('catalog-set');
+  const nor = document.getElementById('nores-set');
+  if (!setKeys.length) { cat.innerHTML = ''; nor.classList.add('visible'); return; }
+  nor.classList.remove('visible');
+
+  const groupHTMLs = setKeys.map(setName => {
+    const movies = [...setGroups[setName]].sort((a,b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+    const numMatch = setName.match(/[-\s#](\d+)$/);
+    const anchorAttr = numMatch ? ` id="as-${numMatch[1]}"` : '';
+    const rows = movies.map(m => movieRowSet(m, q)).join('');
+    return `<div class="group-section"${anchorAttr}>
+      <div class="section-heading" style="font-size:18px;letter-spacing:1px;">${escHtml(setName)}<span class="scount">${movies.length} film${movies.length!==1?'s':''}</span></div>
+      <div class="group-scroll">${rows}</div>
+    </div>`;
+  });
+
+  renderGroupsGrid(cat, groupHTMLs);
+}
+
+// ── Wire controls ─────────────────────────────────────────────────────────────
+function setupControls(tabKey, renderFn) {
+  const searchEl = document.getElementById(`search-${tabKey}`);
+  searchEl.addEventListener('input', e => {
+    state[tabKey].search = e.target.value.trim();
+    renderFn();
+  });
+
+  const bar = document.getElementById(`subtab-${tabKey}`);
+  bar.querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      bar.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      if (tabKey === 'movies') state.movies.filter = pill.dataset.f;
+      renderFn();
+    });
+  });
+}
+
+setupControls('movies', renderMovies);
+setupControls('audio',  renderAudio);
+setupControls('set',    renderSet);
+</script>
+</body>
+</html>
