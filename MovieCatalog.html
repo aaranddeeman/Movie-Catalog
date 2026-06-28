@@ -247,12 +247,13 @@
     border-radius: var(--radius) var(--radius) 0 0;
   }
 
-  /* Language chip — shown on same line as audio */
+  /* Language chip — color driven by --lc, --lb, --le CSS vars set inline */
   .lang-chip {
     font-family: 'Courier Prime', monospace;
-    font-size: 11px; color: #e8c84a;
-    background: rgba(232,200,74,.1);
-    border: 1px solid rgba(232,200,74,.4);
+    font-size: 11px;
+    color: var(--lc, #e8c84a);
+    background: var(--lb, rgba(232,200,74,.1));
+    border: 1px solid var(--le, rgba(232,200,74,.4));
     padding: 1px 8px; border-radius: 20px;
     font-weight: 700; letter-spacing: .4px;
   }
@@ -685,6 +686,30 @@ function audioHeadingColor(name) {
   return audioStyle(name)[0];
 }
 
+// ── Language color map ────────────────────────────────────────────────────────
+// Avoided: yellow (headers), blue/purple/green/orange (media),
+//          red/pink/teal/cyan/lime/mint/fuchsia/crimson (audio formats)
+const LANG_COLORS = {
+  'english':  ['#38bdf8', 'rgba(56,189,248,.12)',  'rgba(56,189,248,.5)'],  // sky blue
+  'german':   ['#fb923c', 'rgba(251,146,60,.12)',  'rgba(251,146,60,.5)'],  // orange
+  'hindi':    ['#4ade80', 'rgba(74,222,128,.12)',  'rgba(74,222,128,.5)'],  // emerald green
+  'marathi':  ['#c084fc', 'rgba(192,132,252,.12)', 'rgba(192,132,252,.5)'], // violet
+};
+
+function langStyle(name) {
+  return LANG_COLORS[name.toLowerCase().trim()]
+    || ['#9ca3af', 'rgba(156,163,175,.1)', 'rgba(156,163,175,.4)']; // grey fallback
+}
+
+function langChipStyle(name) {
+  const [color, bg, border] = langStyle(name);
+  return `style="--lc:${color};--lb:${bg};--le:${border}"`;
+}
+
+function langHeadingColor(name) {
+  return langStyle(name)[0];
+}
+
 // ── Movie row renderers ───────────────────────────────────────────────────────
 // Full card: title + formats + audio + optional position tag
 function movieRowFull(movie, q, groupBucket) {
@@ -703,7 +728,7 @@ function movieRowFull(movie, q, groupBucket) {
     : '';
 
   const langChip = movie.language
-    ? `<span class="lang-chip">${escHtml(movie.language)}</span>`
+    ? `<span class="lang-chip" ${langChipStyle(movie.language)}>${escHtml(movie.language)}</span>`
     : '';
 
   const audioHtml = (movie.audios.length || movie.language)
@@ -972,6 +997,7 @@ function renderLanguage() {
 
   const renderLangGroup = (lang, anchorId) => {
     const movies = [...langGroups[lang]].sort((a,b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+    const hColor = langHeadingColor(lang);
     const anchorAttr = anchorId ? ` id="${anchorId}"` : '';
     const rows = movies.map(m => {
       // Title
@@ -998,8 +1024,8 @@ function renderLanguage() {
         ${fmtHtml}${audioHtml}
       </div>`;
     }).join('');
-    return `<div class="group-section"${anchorAttr}>
-      <div class="section-heading" style="font-size:18px;letter-spacing:1px;">${escHtml(lang)}<span class="scount">${movies.length} film${movies.length!==1?'s':''}</span></div>
+    return `<div class="group-section"${anchorAttr} style="border-top-color:${hColor}">
+      <div class="section-heading" style="font-size:18px;letter-spacing:1px;color:${hColor}">${escHtml(lang)}<span class="scount">${movies.length} film${movies.length!==1?'s':''}</span></div>
       <div class="group-scroll">${rows}</div>
     </div>`;
   };
