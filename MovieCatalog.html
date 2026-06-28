@@ -752,7 +752,7 @@ function movieRowFull(movie, q, groupBucket) {
   </div>`;
 }
 
-// Audio tab: title only (no format/audio/position)
+// Audio tab: title + format chips only
 function movieRowAudio(movie, q) {
   let title = escHtml(movie.title);
   if (q) {
@@ -762,10 +762,14 @@ function movieRowAudio(movie, q) {
       '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
       escHtml(movie.title.slice(idx + q.length));
   }
-  return `<div class="movie-row"><div class="movie-title">${title}</div></div>`;
+  const fmtHtml = movie.formats.length
+    ? `<div class="formats-row">${movie.formats.map(f =>
+        `<span class="format-chip ${chipClass(f)}">${formatLabel(f)}</span>`).join('')}</div>`
+    : '';
+  return `<div class="movie-row"><div class="movie-title">${title}</div>${fmtHtml}</div>`;
 }
 
-// Set tab: title only
+// Set tab: title + format chips only
 function movieRowSet(movie, q) {
   let title = escHtml(movie.title);
   if (q) {
@@ -775,7 +779,11 @@ function movieRowSet(movie, q) {
       '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
       escHtml(movie.title.slice(idx + q.length));
   }
-  return `<div class="movie-row"><div class="movie-title">${title}</div></div>`;
+  const fmtHtml = movie.formats.length
+    ? `<div class="formats-row">${movie.formats.map(f =>
+        `<span class="format-chip ${chipClass(f)}">${formatLabel(f)}</span>`).join('')}</div>`
+    : '';
+  return `<div class="movie-row"><div class="movie-title">${title}</div>${fmtHtml}</div>`;
 }
 
 // ── Grid layout ───────────────────────────────────────────────────────────────
