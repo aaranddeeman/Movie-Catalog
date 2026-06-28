@@ -247,6 +247,16 @@
     border-radius: var(--radius) var(--radius) 0 0;
   }
 
+  /* Language chip — shown on same line as audio */
+  .lang-chip {
+    font-family: 'Courier Prime', monospace;
+    font-size: 11px; color: #e8c84a;
+    background: rgba(232,200,74,.1);
+    border: 1px solid rgba(232,200,74,.4);
+    padding: 1px 8px; border-radius: 20px;
+    font-weight: 700; letter-spacing: .4px;
+  }
+
   /* Position tag */
   .pos-tag {
     font-family: 'Courier Prime', monospace;
@@ -692,8 +702,12 @@ function movieRowFull(movie, q, groupBucket) {
         `<span class="format-chip ${chipClass(f)}">${formatLabel(f)}</span>`).join('')}</div>`
     : '';
 
-  const audioHtml = movie.audios.length
-    ? `<div class="audio-row">${movie.audios.map(a =>
+  const langChip = movie.language
+    ? `<span class="lang-chip">${escHtml(movie.language)}</span>`
+    : '';
+
+  const audioHtml = (movie.audios.length || movie.language)
+    ? `<div class="audio-row">${langChip}${movie.audios.map(a =>
         `<span class="audio-chip" ${audioChipStyle(a)}>${escHtml(a)}</span>`).join('')}</div>`
     : '';
 
@@ -740,9 +754,9 @@ function movieRowSet(movie, q) {
 }
 
 // ── Grid layout ───────────────────────────────────────────────────────────────
-// CSS auto-fill handles column count — just wrap in the grid div
-function renderGroupsGrid(container, groupHTMLs) {
-  container.innerHTML = '<div class="groups-grid">' + groupHTMLs.join('') + '</div>';
+function renderGroupsGrid(container, groupHTMLs, minWidth) {
+  const w = minWidth || '280px';
+  container.innerHTML = `<div class="groups-grid" style="grid-template-columns:repeat(auto-fill,minmax(${w},320px))">` + groupHTMLs.join('') + '</div>';
 }
 
 // ── Render: ALL MOVIES ────────────────────────────────────────────────────────
@@ -999,7 +1013,7 @@ function renderLanguage() {
   // Unknown at the end
   if (langGroups['(Unknown)']) groupHTMLs.push(renderLangGroup('(Unknown)', null));
 
-  renderGroupsGrid(cat, groupHTMLs);
+  renderGroupsGrid(cat, groupHTMLs, '420px');
 }
 
 // ── Wire controls ─────────────────────────────────────────────────────────────
