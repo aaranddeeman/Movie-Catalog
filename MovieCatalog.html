@@ -302,6 +302,7 @@
   <span class="main-tab active" data-tab="movies">🎬 All Movies</span>
   <span class="main-tab" data-tab="audio">🎵 By Audio Format</span>
   <span class="main-tab" data-tab="set">🗂️ By Set</span>
+  <span class="main-tab" data-tab="language">🌐 By Language</span>
 </div>
 
 <!-- ══ TAB: ALL MOVIES ══ -->
@@ -341,13 +342,31 @@
   <div id="nores-set" class="no-results"><h3>No sets found</h3><p>Try a different search.</p></div>
 </div>
 
+<!-- ══ TAB: BY LANGUAGE ══ -->
+<div id="subtab-language" class="subtab-bar">
+  <input type="text" class="search-input" id="search-language" placeholder="Search movies or languages…" />
+  <div class="format-pills">
+    <button class="pill active" data-f="all">All</button>
+    <button class="pill" data-f="UHD">4K UHD</button>
+    <button class="pill" data-f="BluRay-3D">Blu-ray 3D</button>
+    <button class="pill" data-f="BluRay">Blu-ray</button>
+    <button class="pill" data-f="DVD">DVD</button>
+  </div>
+</div>
+<div id="alpha-language" class="alpha-nav"></div>
+<div id="panel-language" class="tab-panel">
+  <div id="catalog-language"></div>
+  <div id="nores-language" class="no-results"><h3>No movies found</h3><p>Try a different search or filter.</p></div>
+</div>
+
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 let allMovies = [];
 const state = {
-  movies: { filter: 'all', search: '' },
-  audio:  { search: '' },
-  set:    { search: '' },
+  movies:   { filter: 'all', search: '' },
+  audio:    { search: '' },
+  set:      { search: '' },
+  language: { filter: 'all', search: '' },
 };
 let activeTab = 'movies';
 
@@ -487,7 +506,6 @@ function processData(rows) {
     }
 }
 function _processData(rows) {
-
   if (!rows.length) { alert('Spreadsheet appears empty.'); return; }
   const cols = Object.keys(rows[0]);
 
@@ -505,6 +523,9 @@ function _processData(rows) {
                    || findCol('position tag', 'position', 'shelf');
   const setCol      = cols.find(c => c.trim().toLowerCase() === 'set')
                    || findCol('set', 'collection', 'series', 'franchise');
+  const langCol     = cols.find(c => c.trim().toLowerCase() === 'language')
+                   || cols.find(c => c.trim().toLowerCase() === 'lang')
+                   || null;
   const formatCol   = (!uhdCol && !blurayCol && !dvdCol) ? findCol('format', 'media', 'type') : null;
   const isTruthy    = v => { const s = String(v).trim().toLowerCase(); return s && s !== '0' && s !== 'false' && s !== 'no' && s !== 'n'; };
 
@@ -514,11 +535,16 @@ function _processData(rows) {
     const rawTitle = titleCol ? String(row[titleCol] || '').trim() : '';
     if (!rawTitle) return;
 
-    if (!movieMap[rawTitle]) movieMap[rawTitle] = { title: rawTitle, formats: [], audios: new Set(), position: '', set: '' };
+    if (!movieMap[rawTitle]) movieMap[rawTitle] = { title: rawTitle, formats: [], audios: new Set(), position: '', set: '', language: '' };
     const movie = movieMap[rawTitle];
 
     if (positionCol && !movie.position) movie.position = String(row[positionCol] || '').trim();
     if (setCol      && !movie.set)      movie.set      = String(row[setCol]      || '').trim();
+    // Language: take first non-empty value found across all rows for this movie
+    if (langCol) {
+      const langVal = String(row[langCol] || '').trim();
+      if (langVal && !movie.language) movie.language = langVal;
+    }
 
     const audio = audioCol ? String(row[audioCol] || '').trim() : '';
     if (audio) movie.audios.add(audio);
@@ -557,6 +583,7 @@ function _processData(rows) {
   renderMovies();
   renderAudio();
   renderSet();
+  renderLanguage();
   } // end _processData
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
@@ -569,13 +596,12 @@ document.querySelectorAll('.main-tab').forEach(tab => {
 });
 
 function showTab(tab) {
-  ['movies', 'audio', 'set'].forEach(t => {
+  ['movies', 'audio', 'set', 'language'].forEach(t => {
     const on = t === tab;
     document.getElementById(`subtab-${t}`).classList.toggle('visible', on);
     document.getElementById(`alpha-${t}`).classList.toggle('visible', on);
     document.getElementById(`panel-${t}`).classList.toggle('visible', on);
   });
-  // Reset badge to total when leaving Movies tab
   if (tab !== 'movies' && allMovies.length) {
     document.getElementById('count-badge').innerHTML = `<b>${allMovies.length}</b> movies`;
   }
@@ -881,6 +907,101 @@ function renderSet() {
   renderGroupsGrid(cat, groupHTMLs);
 }
 
+// ── Render: BY LANGUAGE ───────────────────────────────────────────────────────
+function renderLanguage() {
+  const { filter, search } = state.language;
+  const q = search.toLowerCase();
+  const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+
+  const filtered = allMovies.filter(m =>
+    (!q || m.title.toLowerCase().includes(q) || m.language.toLowerCase().includes(q)) &&
+    (filter === 'all' || m.formats.includes(filter))
+  );
+
+  // Group by language; movies with no language go under "(Unknown)"
+  const langGroups = {};
+  filtered.forEach(m => {
+    const lang = m.language || '(Unknown)';
+    (langGroups[lang] = langGroups[lang] || []).push(m);
+  });
+
+  // Sort language keys A-Z, (Unknown) last
+  const langKeys = Object.keys(langGroups).sort((a, b) => {
+    if (a === '(Unknown)') return 1;
+    if (b === '(Unknown)') return -1;
+    return a.localeCompare(b);
+  });
+
+  // Alpha nav keyed on first letter of language name
+  const alphaHit = new Set(langKeys.map(k => {
+    if (k === '(Unknown)') return '';
+    const f = k[0];
+    return f ? (/[0-9]/.test(f) ? '#' : f.toUpperCase()) : '';
+  }).filter(Boolean));
+  document.getElementById('alpha-language').innerHTML = letters.map(l =>
+    `<a class="alpha-link ${alphaHit.has(l) ? 'has-items' : 'empty'}" href="#al2-${l}">${l}</a>`
+  ).join('');
+
+  const cat = document.getElementById('catalog-language');
+  const nor = document.getElementById('nores-language');
+  if (!langKeys.length) { cat.innerHTML = ''; nor.classList.add('visible'); return; }
+  nor.classList.remove('visible');
+
+  // Bucket by first letter for alpha anchors
+  const byLetter = {};
+  langKeys.forEach(k => {
+    if (k === '(Unknown)') return;
+    const f = k[0] || '';
+    const b = f ? (/[0-9]/.test(f) ? '#' : f.toUpperCase()) : '#';
+    (byLetter[b] = byLetter[b] || []).push(k);
+  });
+
+  const renderLangGroup = (lang, anchorId) => {
+    const movies = [...langGroups[lang]].sort((a,b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+    const anchorAttr = anchorId ? ` id="${anchorId}"` : '';
+    const rows = movies.map(m => {
+      // Title
+      let title = escHtml(m.title);
+      if (q) {
+        const idx = m.title.toLowerCase().indexOf(q);
+        if (idx !== -1) title =
+          escHtml(m.title.slice(0,idx)) +
+          '<em>' + escHtml(m.title.slice(idx, idx+q.length)) + '</em>' +
+          escHtml(m.title.slice(idx+q.length));
+      }
+      // Formats
+      const fmtHtml = m.formats.length
+        ? `<div class="formats-row">${m.formats.map(f =>
+            `<span class="format-chip ${chipClass(f)}">${formatLabel(f)}</span>`).join('')}</div>`
+        : '';
+      // Audio
+      const audioHtml = m.audios.length
+        ? `<div class="audio-row">${m.audios.map(a =>
+            `<span class="audio-chip" ${audioChipStyle(a)}>${escHtml(a)}</span>`).join('')}</div>`
+        : '';
+      return `<div class="movie-row">
+        <div class="movie-title">${title}</div>
+        ${fmtHtml}${audioHtml}
+      </div>`;
+    }).join('');
+    return `<div class="group-section"${anchorAttr}>
+      <div class="section-heading" style="font-size:18px;letter-spacing:1px;">${escHtml(lang)}<span class="scount">${movies.length} film${movies.length!==1?'s':''}</span></div>
+      <div class="group-scroll">${rows}</div>
+    </div>`;
+  };
+
+  const groupHTMLs = [];
+  letters.filter(l => byLetter[l]).forEach(l => {
+    byLetter[l].forEach((lang, i) => {
+      groupHTMLs.push(renderLangGroup(lang, i === 0 ? `al2-${l}` : null));
+    });
+  });
+  // Unknown at the end
+  if (langGroups['(Unknown)']) groupHTMLs.push(renderLangGroup('(Unknown)', null));
+
+  renderGroupsGrid(cat, groupHTMLs);
+}
+
 // ── Wire controls ─────────────────────────────────────────────────────────────
 function setupControls(tabKey, renderFn) {
   const searchEl = document.getElementById(`search-${tabKey}`);
@@ -895,14 +1016,16 @@ function setupControls(tabKey, renderFn) {
       bar.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       if (tabKey === 'movies') state.movies.filter = pill.dataset.f;
+      if (tabKey === 'language') state.language.filter = pill.dataset.f;
       renderFn();
     });
   });
 }
 
-setupControls('movies', renderMovies);
-setupControls('audio',  renderAudio);
-setupControls('set',    renderSet);
+setupControls('movies',   renderMovies);
+setupControls('audio',    renderAudio);
+setupControls('set',      renderSet);
+setupControls('language', renderLanguage);
 
 // ── Mark JS as running ────────────────────────────────────────────────────────
 const jsStatus = document.getElementById('js-status');
