@@ -721,10 +721,63 @@ function langHeadingColor(name) {
   return langStyle(name)[0];
 }
 
+// ── Native script title map ───────────────────────────────────────────────────
+// Key: exact title as in xlsx (lowercase for matching)
+// Value: display title in native script
+const NATIVE_TITLES = {
+  // German — Roman script unchanged
+  'das boot': 'Das Boot',
+  // Hindi
+  '3 idiots': '३ इडियट्स',
+  'agneepath (2012)': 'अग्निपथ (२०१२)',
+  'bahubali - the beginning': 'बाहुबली - द बिगिनिंग',
+  'bahubali - the conslusion': 'बाहुबली - द कन्क्लूज़न',
+  'bajirao mastani': 'बाजीराव मस्तानी',
+  'chennai express': 'चेन्नई एक्सप्रेस',
+  'dhoom': 'धूम',
+  'drishyam': 'दृश्यम',
+  'fanaa': 'फना',
+  'ghazi attack': 'द गाज़ी अटैक',
+  'haider': 'हैदर',
+  'hum tum': 'हम तुम',
+  'kabhi alvida naa kehna': 'कभी अलविदा ना कहना',
+  'krish': 'क्रिश्',
+  'mary kom': 'मैरी कॉम',
+  'mera naam joker': 'मेरा नाम जोकर',
+  'mohenjo daro': 'मोहेंजो दारो',
+  'neal n nikki': 'नील \'न\' निक्की',
+  'neerja': 'नीरजा',
+  'once upon a time in mumbai': 'वन्स अपॉन अ टाइम इन मुंबई',
+  'once upon a time in mumbai - dobaara': 'वन्स अपॉन अ टाइम इन मुंबई - दोबारा',
+  'pk': 'पी.के.',
+  'padmaavat': 'पद्मावत',
+  'raazi': 'राज़ी',
+  'satyagraha': 'सत्याग्रह',
+  'singham': 'सिंघम',
+  'singham returns': 'सिंघम रिटर्न्स',
+  'wazir': 'वज़ीर',
+  // Marathi
+  'dr. prakash baba amte': 'डॉ. प्रकाश बाबा आमटे',
+  'duniyadaari': 'दुनियादारी',
+  'fandry': 'फँड्री',
+  'jogawa': 'जोगवा',
+  'killa': 'किल्ला',
+  'lai bhaari': 'लई भारी',
+  'lokmanya - ek yugapurush': 'लोकमान्य - एक युगपुरुष',
+  'natarang': 'नटरंग',
+  'natsamrat': 'नटसम्राट',
+  'umbartha': 'उंबरठा',
+};
+
+function nativeTitle(title) {
+  return NATIVE_TITLES[title.toLowerCase().trim()] || title;
+}
+
 // ── Movie row renderers ───────────────────────────────────────────────────────
 // Full card: title + formats + audio + optional position tag
 function movieRowFull(movie, q, groupBucket) {
-  let title = escHtml(movie.title);
+  const display = nativeTitle(movie.title);
+  let title = escHtml(display);
   if (q) {
     const idx = movie.title.toLowerCase().indexOf(q);
     if (idx !== -1) title =
@@ -765,7 +818,8 @@ function movieRowFull(movie, q, groupBucket) {
 
 // Audio tab: title + format chips only
 function movieRowAudio(movie, q) {
-  let title = escHtml(movie.title);
+  const display = nativeTitle(movie.title);
+  let title = escHtml(display);
   if (q) {
     const idx = movie.title.toLowerCase().indexOf(q);
     if (idx !== -1) title =
@@ -782,7 +836,8 @@ function movieRowAudio(movie, q) {
 
 // Set tab: title + format chips only
 function movieRowSet(movie, q) {
-  let title = escHtml(movie.title);
+  const display = nativeTitle(movie.title);
+  let title = escHtml(display);
   if (q) {
     const idx = movie.title.toLowerCase().indexOf(q);
     if (idx !== -1) title =
@@ -1020,7 +1075,7 @@ function renderLanguage() {
     const anchorAttr = anchorId ? ` id="${anchorId}"` : '';
     const rows = movies.map(m => {
       // Title
-      let title = escHtml(m.title);
+      let title = escHtml(nativeTitle(m.title));
       if (q) {
         const idx = m.title.toLowerCase().indexOf(q);
         if (idx !== -1) title =
