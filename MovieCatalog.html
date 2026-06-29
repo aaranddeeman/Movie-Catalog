@@ -870,14 +870,19 @@ function closePopup() {
   synBody.innerHTML = '<div id="synopsis-loading">Loading synopsis…</div>';
 }
 
-function openSynopsis(romanTitle, displayTitle) {
+function openSynopsis(romanTitle, displayTitle, language) {
   synTitle.textContent = displayTitle;
   synBody.innerHTML = '<div id="synopsis-loading">⏳ Loading synopsis…</div>';
   synLink.href = '#';
   overlay.classList.add('open');
 
-  // Step 1: search Wikipedia for the title, get up to 5 candidates
-  const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(romanTitle + ' film')}&srlimit=5&format=json&origin=*`;
+  // Build search query — include language for non-English to disambiguate
+  // e.g. "Natsamrat Marathi film", "Taxi Driver English film"
+  const langHint = language && language.toLowerCase() !== 'english' ? language : '';
+  const searchQuery = [romanTitle, langHint, 'film'].filter(Boolean).join(' ');
+
+  // Step 1: search Wikipedia for the title, get up to 8 candidates
+  const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery)}&srlimit=8&format=json&origin=*`;
 
   fetch(searchUrl)
     .then(r => r.json())
@@ -885,16 +890,26 @@ function openSynopsis(romanTitle, displayTitle) {
       const results = (data.query && data.query.search) || [];
       if (!results.length) throw new Error('no results');
 
-      // Pick best match:
-      // 1. Prefer exact title + "(film)" e.g. "Captain Phillips (film)"
-      // 2. Then title + "(YYYY film)" e.g. "Drishyam (2015 film)"
-      // 3. Then any result whose title contains "(film)"
-      // 4. Then the top result
       const titleLower = romanTitle.toLowerCase();
+      const langLower  = language ? language.toLowerCase() : '';
+
+      // Pick best match with language-aware priority:
+      // 1. Title + language + "film" e.g. "Natsamrat (Marathi film)"
+      // 2. Title + "(film)" e.g. "Captain Phillips (film)"
+      // 3. Title + "(YYYY film)" e.g. "Drishyam (2015 film)"
+      // 4. Title starts with name + any "(film)" variant
+      // 5. Title contains language name
+      // 6. Exact title match
+      // 7. Top result
       let best =
+        (langLower && results.find(r => {
+          const rl = r.title.toLowerCase();
+          return rl.startsWith(titleLower) && rl.includes(langLower) && rl.includes('film');
+        })) ||
         results.find(r => r.title.toLowerCase() === titleLower + ' (film)') ||
         results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\(\d{4} film\)/i.test(r.title)) ||
         results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\bfilm\b/i.test(r.title)) ||
+        (langLower && results.find(r => r.title.toLowerCase().includes(langLower))) ||
         results.find(r => r.title.toLowerCase() === titleLower) ||
         results[0];
 
@@ -918,7 +933,7 @@ function openSynopsis(romanTitle, displayTitle) {
         <div style="clear:both"></div>`;
     })
     .catch(() => {
-      const searchFallback = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(romanTitle + ' film')}&title=Special:Search`;
+      const searchFallback = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(searchQuery)}&title=Special:Search`;
       synLink.href = searchFallback;
       synBody.innerHTML = `
         <p style="color:var(--muted);margin-bottom:12px">Could not load synopsis automatically.</p>
@@ -945,7 +960,8 @@ function titleHtml(movie, q) {
   }
   const rt = escHtml(movie.title).replace(/'/g, '&apos;');
   const dt = escHtml(display).replace(/'/g, '&apos;');
-  return `<span class="title-link" onclick="openSynopsis('${rt}','${dt}')">${inner}</span>`;
+  const lg = escHtml(movie.language || '').replace(/'/g, '&apos;');
+  return `<span class="title-link" onclick="openSynopsis('${rt}','${dt}','${lg}')">${inner}</span>`;
 }
 // Full card: title + formats + audio + optional position tag
 function movieRowFull(movie, q, groupBucket) {
