@@ -876,69 +876,76 @@ function openSynopsis(romanTitle, displayTitle, language) {
   synLink.href = '#';
   overlay.classList.add('open');
 
-  // Build search query — include language for non-English to disambiguate
-  // e.g. "Natsamrat Marathi film", "Taxi Driver English film"
-  const langHint = language && language.toLowerCase() !== 'english' ? language : '';
-  const searchQuery = [romanTitle, langHint, 'film'].filter(Boolean).join(' ');
+  const lang     = (language || '').trim();
+  const langLower = lang.toLowerCase();
+  const isEnglish = !lang || langLower === 'english';
+  const titleLower = romanTitle.toLowerCase();
 
-  // Step 1: search Wikipedia for the title, get up to 8 candidates
-  const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery)}&srlimit=8&format=json&origin=*`;
+  function showSummary(pageTitle) {
+    return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`)
+      .then(r => { if (!r.ok) throw new Error('not found'); return r.json(); })
+      .then(data => {
+        const wikiUrl = data.content_urls && data.content_urls.desktop && data.content_urls.desktop.page;
+        if (wikiUrl) synLink.href = wikiUrl;
+        const extract = data.extract || '';
+        if (!extract) throw new Error('no extract');
+        synBody.innerHTML = `
+          ${data.thumbnail ? `<img src="${data.thumbnail.source}" alt="" style="float:right;max-width:140px;margin:0 0 12px 16px;border-radius:6px;border:1px solid var(--border)">` : ''}
+          <p style="margin-bottom:10px">${extract.replace(/\n\n/g,'</p><p style="margin-bottom:10px">').replace(/\n/g,' ')}</p>
+          <div style="clear:both"></div>`;
+      });
+  }
 
-  fetch(searchUrl)
-    .then(r => r.json())
-    .then(data => {
-      const results = (data.query && data.query.search) || [];
-      if (!results.length) throw new Error('no results');
+  function searchAndPick(query, preferLang) {
+    return fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=8&format=json&origin=*`)
+      .then(r => r.json())
+      .then(data => {
+        const results = (data.query && data.query.search) || [];
+        if (!results.length) throw new Error('no results');
 
-      const titleLower = romanTitle.toLowerCase();
-      const langLower  = language ? language.toLowerCase() : '';
+        let best;
+        if (preferLang) {
+          // Non-English: prefer result with language name in title
+          best =
+            results.find(r => r.title.toLowerCase() === titleLower + ' (' + langLower + ' film)') ||
+            results.find(r => r.title.toLowerCase().startsWith(titleLower) && r.title.toLowerCase().includes(langLower)) ||
+            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\(\d{4} film\)/i.test(r.title)) ||
+            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\bfilm\b/i.test(r.title)) ||
+            results[0];
+        } else {
+          // English: original proven logic
+          best =
+            results.find(r => r.title.toLowerCase() === titleLower + ' (film)') ||
+            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\(\d{4} film\)/i.test(r.title)) ||
+            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\bfilm\b/i.test(r.title)) ||
+            results.find(r => r.title.toLowerCase() === titleLower) ||
+            results[0];
+        }
+        return showSummary(best.title);
+      });
+  }
 
-      // Pick best match with language-aware priority:
-      // 1. Title + language + "film" e.g. "Natsamrat (Marathi film)"
-      // 2. Title + "(film)" e.g. "Captain Phillips (film)"
-      // 3. Title + "(YYYY film)" e.g. "Drishyam (2015 film)"
-      // 4. Title starts with name + any "(film)" variant
-      // 5. Title contains language name
-      // 6. Exact title match
-      // 7. Top result
-      let best =
-        (langLower && results.find(r => {
-          const rl = r.title.toLowerCase();
-          return rl.startsWith(titleLower) && rl.includes(langLower) && rl.includes('film');
-        })) ||
-        results.find(r => r.title.toLowerCase() === titleLower + ' (film)') ||
-        results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\(\d{4} film\)/i.test(r.title)) ||
-        results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\bfilm\b/i.test(r.title)) ||
-        (langLower && results.find(r => r.title.toLowerCase().includes(langLower))) ||
-        results.find(r => r.title.toLowerCase() === titleLower) ||
-        results[0];
+  const fallbackUrl = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(romanTitle + ' ' + lang + ' film').trim()}&title=Special:Search`;
 
-      // Step 2: fetch the summary for the chosen page
-      return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(best.title)}`);
-    })
-    .then(r => {
-      if (!r.ok) throw new Error('summary not found');
-      return r.json();
-    })
-    .then(data => {
-      const wikiUrl = data.content_urls && data.content_urls.desktop && data.content_urls.desktop.page;
-      if (wikiUrl) synLink.href = wikiUrl;
+  function fail() {
+    synLink.href = fallbackUrl;
+    synBody.innerHTML = `
+      <p style="color:var(--muted);margin-bottom:12px">Could not load synopsis automatically.</p>
+      <p><a href="${fallbackUrl}" target="_blank" style="color:var(--accent)">Search Wikipedia for "${escHtml(romanTitle)}" →</a></p>`;
+  }
 
-      const extract = data.extract || '';
-      if (!extract) throw new Error('no extract');
-
-      synBody.innerHTML = `
-        ${data.thumbnail ? `<img src="${data.thumbnail.source}" alt="" style="float:right;max-width:140px;margin:0 0 12px 16px;border-radius:6px;border:1px solid var(--border)">` : ''}
-        <p style="margin-bottom:10px">${extract.replace(/\n\n/g, '</p><p style="margin-bottom:10px">').replace(/\n/g, ' ')}</p>
-        <div style="clear:both"></div>`;
-    })
-    .catch(() => {
-      const searchFallback = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(searchQuery)}&title=Special:Search`;
-      synLink.href = searchFallback;
-      synBody.innerHTML = `
-        <p style="color:var(--muted);margin-bottom:12px">Could not load synopsis automatically.</p>
-        <p><a href="${searchFallback}" target="_blank" style="color:var(--accent)">Search Wikipedia for "${escHtml(romanTitle)}" →</a></p>`;
-    });
+  if (isEnglish) {
+    // English: try "(film)" page directly first, then search
+    showSummary(romanTitle + ' (film)')
+      .catch(() => searchAndPick(romanTitle + ' film', false))
+      .catch(fail);
+  } else {
+    // Non-English: try exact "(language film)" page first, then language-biased search
+    showSummary(romanTitle + ' (' + lang + ' film)')
+      .catch(() => searchAndPick(romanTitle + ' ' + lang + ' film', true))
+      .catch(() => searchAndPick(romanTitle + ' film', true))
+      .catch(fail);
+  }
 }
 
 // ── Title HTML builder — wraps title in clickable span ────────────────────────
