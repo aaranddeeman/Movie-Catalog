@@ -271,13 +271,15 @@
     padding: 10px 16px;
     border-top: 1px solid var(--border);
     flex-shrink: 0; background: var(--surface2);
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap;
   }
   #synopsis-wiki-link {
     font-size: 12px; color: var(--accent); text-decoration: none;
     font-family: 'Courier Prime', monospace;
   }
   #synopsis-wiki-link:hover { text-decoration: underline; }
+  #synopsis-bluray-link:hover { text-decoration: underline !important; }
   #synopsis-footer-note { font-size: 11px; color: var(--muted); }
 
   /* Media formats row */
@@ -384,7 +386,7 @@
     </div>
     <div id="synopsis-footer">
       <a id="synopsis-wiki-link" href="#" target="_blank">Read full article on Wikipedia →</a>
-      <span id="synopsis-footer-note">Source: Wikipedia</span>
+      <a id="synopsis-bluray-link" href="#" target="_blank" style="font-size:12px;color:#60a5fa;text-decoration:none;font-family:'Courier Prime',monospace;">🔵 View on Blu-ray.com →</a>
     </div>
   </div>
 </div>
@@ -859,6 +861,7 @@ const overlay  = document.getElementById('synopsis-overlay');
 const synTitle = document.getElementById('synopsis-title');
 const synBody  = document.getElementById('synopsis-body');
 const synLink  = document.getElementById('synopsis-wiki-link');
+const synBluray = document.getElementById('synopsis-bluray-link');
 const synClose = document.getElementById('synopsis-close');
 
 synClose.addEventListener('click', closePopup);
@@ -874,6 +877,8 @@ function openSynopsis(romanTitle, displayTitle, language) {
   synTitle.textContent = displayTitle;
   synBody.innerHTML = '<div id="synopsis-loading">⏳ Loading synopsis…</div>';
   synLink.href = '#';
+  // Set blu-ray.com search link immediately
+  synBluray.href = `https://www.blu-ray.com/movies/search.php?keyword=${encodeURIComponent(romanTitle)}&submit=Search`;
   overlay.classList.add('open');
 
   const lang     = (language || '').trim();
