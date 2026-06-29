@@ -215,6 +215,70 @@
     font-weight: 600; font-size: 15px; line-height: 1.3; color: var(--text);
   }
   .movie-title em { font-style: normal; background: var(--accent); color: #000; padding: 0 2px; border-radius: 2px; }
+  .movie-title .title-link {
+    cursor: pointer; text-decoration: none; color: inherit;
+    border-bottom: 1px dotted rgba(255,255,255,.2);
+    transition: border-color .15s, color .15s;
+  }
+  .movie-title .title-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── SYNOPSIS POPUP ── */
+  #synopsis-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.75); z-index: 1000;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #synopsis-overlay.open { display: flex; }
+  #synopsis-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: var(--radius);
+    width: 100%; max-width: 640px;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  #synopsis-header {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    flex-shrink: 0; background: var(--surface2);
+  }
+  #synopsis-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px; letter-spacing: 2px; color: var(--accent); line-height: 1.1;
+  }
+  #synopsis-close {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; font-size: 18px;
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all .15s;
+  }
+  #synopsis-close:hover { border-color: var(--accent); color: var(--accent); }
+  #synopsis-body {
+    padding: 16px; overflow-y: auto; flex: 1;
+    font-size: 14px; line-height: 1.8; color: var(--text);
+  }
+  #synopsis-body::-webkit-scrollbar { width: 4px; }
+  #synopsis-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  #synopsis-loading {
+    text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px;
+  }
+  #synopsis-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0; background: var(--surface2);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #synopsis-wiki-link {
+    font-size: 12px; color: var(--accent); text-decoration: none;
+    font-family: 'Courier Prime', monospace;
+  }
+  #synopsis-wiki-link:hover { text-decoration: underline; }
+  #synopsis-footer-note { font-size: 11px; color: var(--muted); }
 
   /* Media formats row */
   .formats-row { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -305,6 +369,23 @@
     <p id="manual-hint">Select your catalog file below.</p>
     <p id="js-status" style="font-size:12px;color:#6b6b7a;">⏳ Initialising…</p>
     <input type="file" id="file-input-drop" accept=".xlsx,.xls,.csv" />
+  </div>
+</div>
+
+<!-- SYNOPSIS POPUP -->
+<div id="synopsis-overlay">
+  <div id="synopsis-box">
+    <div id="synopsis-header">
+      <div id="synopsis-title"></div>
+      <button id="synopsis-close">✕</button>
+    </div>
+    <div id="synopsis-body">
+      <div id="synopsis-loading">Loading synopsis…</div>
+    </div>
+    <div id="synopsis-footer">
+      <a id="synopsis-wiki-link" href="#" target="_blank">Read full article on Wikipedia →</a>
+      <span id="synopsis-footer-note">Source: Wikipedia</span>
+    </div>
   </div>
 </div>
 
@@ -773,18 +854,102 @@ function nativeTitle(title) {
   return NATIVE_TITLES[title.toLowerCase().trim()] || title;
 }
 
-// ── Movie row renderers ───────────────────────────────────────────────────────
-// Full card: title + formats + audio + optional position tag
-function movieRowFull(movie, q, groupBucket) {
+// ── Synopsis popup ────────────────────────────────────────────────────────────
+const overlay  = document.getElementById('synopsis-overlay');
+const synTitle = document.getElementById('synopsis-title');
+const synBody  = document.getElementById('synopsis-body');
+const synLink  = document.getElementById('synopsis-wiki-link');
+const synClose = document.getElementById('synopsis-close');
+
+synClose.addEventListener('click', closePopup);
+overlay.addEventListener('click', e => { if (e.target === overlay) closePopup(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
+
+function closePopup() {
+  overlay.classList.remove('open');
+  synBody.innerHTML = '<div id="synopsis-loading">Loading synopsis…</div>';
+}
+
+function openSynopsis(romanTitle, displayTitle) {
+  synTitle.textContent = displayTitle;
+  synBody.innerHTML = '<div id="synopsis-loading">⏳ Loading synopsis…</div>';
+  synLink.href = '#';
+  overlay.classList.add('open');
+
+  // Step 1: search Wikipedia for the title, get up to 5 candidates
+  const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(romanTitle + ' film')}&srlimit=5&format=json&origin=*`;
+
+  fetch(searchUrl)
+    .then(r => r.json())
+    .then(data => {
+      const results = (data.query && data.query.search) || [];
+      if (!results.length) throw new Error('no results');
+
+      // Pick best match:
+      // 1. Prefer exact title + "(film)" e.g. "Captain Phillips (film)"
+      // 2. Then title + "(YYYY film)" e.g. "Drishyam (2015 film)"
+      // 3. Then any result whose title contains "(film)"
+      // 4. Then the top result
+      const titleLower = romanTitle.toLowerCase();
+      let best =
+        results.find(r => r.title.toLowerCase() === titleLower + ' (film)') ||
+        results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\(\d{4} film\)/i.test(r.title)) ||
+        results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\bfilm\b/i.test(r.title)) ||
+        results.find(r => r.title.toLowerCase() === titleLower) ||
+        results[0];
+
+      // Step 2: fetch the summary for the chosen page
+      return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(best.title)}`);
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('summary not found');
+      return r.json();
+    })
+    .then(data => {
+      const wikiUrl = data.content_urls && data.content_urls.desktop && data.content_urls.desktop.page;
+      if (wikiUrl) synLink.href = wikiUrl;
+
+      const extract = data.extract || '';
+      if (!extract) throw new Error('no extract');
+
+      synBody.innerHTML = `
+        ${data.thumbnail ? `<img src="${data.thumbnail.source}" alt="" style="float:right;max-width:140px;margin:0 0 12px 16px;border-radius:6px;border:1px solid var(--border)">` : ''}
+        <p style="margin-bottom:10px">${extract.replace(/\n\n/g, '</p><p style="margin-bottom:10px">').replace(/\n/g, ' ')}</p>
+        <div style="clear:both"></div>`;
+    })
+    .catch(() => {
+      const searchFallback = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(romanTitle + ' film')}&title=Special:Search`;
+      synLink.href = searchFallback;
+      synBody.innerHTML = `
+        <p style="color:var(--muted);margin-bottom:12px">Could not load synopsis automatically.</p>
+        <p><a href="${searchFallback}" target="_blank" style="color:var(--accent)">Search Wikipedia for "${escHtml(romanTitle)}" →</a></p>`;
+    });
+}
+
+// ── Title HTML builder — wraps title in clickable span ────────────────────────
+function titleHtml(movie, q) {
   const display = nativeTitle(movie.title);
-  let title = escHtml(display);
+  let inner;
   if (q) {
     const idx = movie.title.toLowerCase().indexOf(q);
-    if (idx !== -1) title =
-      escHtml(movie.title.slice(0, idx)) +
-      '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
-      escHtml(movie.title.slice(idx + q.length));
+    if (idx !== -1) {
+      inner =
+        escHtml(movie.title.slice(0, idx)) +
+        '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
+        escHtml(movie.title.slice(idx + q.length));
+    } else {
+      inner = escHtml(display);
+    }
+  } else {
+    inner = escHtml(display);
   }
+  const rt = escHtml(movie.title).replace(/'/g, '&apos;');
+  const dt = escHtml(display).replace(/'/g, '&apos;');
+  return `<span class="title-link" onclick="openSynopsis('${rt}','${dt}')">${inner}</span>`;
+}
+// Full card: title + formats + audio + optional position tag
+function movieRowFull(movie, q, groupBucket) {
+  const title = titleHtml(movie, q);
 
   const fmtHtml = movie.formats.length
     ? `<div class="formats-row">${movie.formats.map(f =>
@@ -818,15 +983,7 @@ function movieRowFull(movie, q, groupBucket) {
 
 // Audio tab: title + format chips only
 function movieRowAudio(movie, q) {
-  const display = nativeTitle(movie.title);
-  let title = escHtml(display);
-  if (q) {
-    const idx = movie.title.toLowerCase().indexOf(q);
-    if (idx !== -1) title =
-      escHtml(movie.title.slice(0, idx)) +
-      '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
-      escHtml(movie.title.slice(idx + q.length));
-  }
+  const title = titleHtml(movie, q);
   const fmtHtml = movie.formats.length
     ? `<div class="formats-row">${movie.formats.map(f =>
         `<span class="format-chip ${chipClass(f)}">${formatLabel(f)}</span>`).join('')}</div>`
@@ -836,15 +993,7 @@ function movieRowAudio(movie, q) {
 
 // Set tab: title + format chips only
 function movieRowSet(movie, q) {
-  const display = nativeTitle(movie.title);
-  let title = escHtml(display);
-  if (q) {
-    const idx = movie.title.toLowerCase().indexOf(q);
-    if (idx !== -1) title =
-      escHtml(movie.title.slice(0, idx)) +
-      '<em>' + escHtml(movie.title.slice(idx, idx + q.length)) + '</em>' +
-      escHtml(movie.title.slice(idx + q.length));
-  }
+  const title = titleHtml(movie, q);
   const fmtHtml = movie.formats.length
     ? `<div class="formats-row">${movie.formats.map(f =>
         `<span class="format-chip ${chipClass(f)}">${formatLabel(f)}</span>`).join('')}</div>`
@@ -1074,15 +1223,7 @@ function renderLanguage() {
     const hColor = langHeadingColor(lang);
     const anchorAttr = anchorId ? ` id="${anchorId}"` : '';
     const rows = movies.map(m => {
-      // Title
-      let title = escHtml(nativeTitle(m.title));
-      if (q) {
-        const idx = m.title.toLowerCase().indexOf(q);
-        if (idx !== -1) title =
-          escHtml(m.title.slice(0,idx)) +
-          '<em>' + escHtml(m.title.slice(idx, idx+q.length)) + '</em>' +
-          escHtml(m.title.slice(idx+q.length));
-      }
+      const title = titleHtml(m, q);
       // Formats
       const fmtHtml = m.formats.length
         ? `<div class="formats-row">${m.formats.map(f =>
