@@ -271,15 +271,13 @@
     padding: 10px 16px;
     border-top: 1px solid var(--border);
     flex-shrink: 0; background: var(--surface2);
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: space-between;
   }
   #synopsis-wiki-link {
     font-size: 12px; color: var(--accent); text-decoration: none;
     font-family: 'Courier Prime', monospace;
   }
   #synopsis-wiki-link:hover { text-decoration: underline; }
-  #synopsis-bluray-link:hover { text-decoration: underline !important; }
   #synopsis-footer-note { font-size: 11px; color: var(--muted); }
 
   /* Media formats row */
@@ -386,7 +384,7 @@
     </div>
     <div id="synopsis-footer">
       <a id="synopsis-wiki-link" href="#" target="_blank">Read full article on Wikipedia →</a>
-      <a id="synopsis-bluray-link" href="#" target="_blank" style="font-size:12px;color:#60a5fa;text-decoration:none;font-family:'Courier Prime',monospace;">🔵 View on Blu-ray.com →</a>
+      <span id="synopsis-footer-note">Source: Wikipedia</span>
     </div>
   </div>
 </div>
@@ -861,7 +859,6 @@ const overlay  = document.getElementById('synopsis-overlay');
 const synTitle = document.getElementById('synopsis-title');
 const synBody  = document.getElementById('synopsis-body');
 const synLink  = document.getElementById('synopsis-wiki-link');
-const synBluray = document.getElementById('synopsis-bluray-link');
 const synClose = document.getElementById('synopsis-close');
 
 synClose.addEventListener('click', closePopup);
@@ -877,14 +874,16 @@ function openSynopsis(romanTitle, displayTitle, language) {
   synTitle.textContent = displayTitle;
   synBody.innerHTML = '<div id="synopsis-loading">⏳ Loading synopsis…</div>';
   synLink.href = '#';
-  // Set blu-ray.com search link immediately
-  synBluray.href = `https://www.blu-ray.com/movies/search.php?keyword=${encodeURIComponent(romanTitle)}&submit=Search`;
   overlay.classList.add('open');
 
-  const lang     = (language || '').trim();
-  const langLower = lang.toLowerCase();
-  const isEnglish = !lang || langLower === 'english';
-  const titleLower = romanTitle.toLowerCase();
+  const lang = (language || '').trim();
+  const isEnglish = !lang || lang.toLowerCase() === 'english';
+
+  // Search query format: "Language film MovieName" e.g. "Marathi film Natsamrat"
+  // For English: "film MovieName" (no language prefix needed)
+  const searchQuery = isEnglish
+    ? `film ${romanTitle}`
+    : `${lang} film ${romanTitle}`;
 
   function showSummary(pageTitle) {
     return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`)
@@ -901,56 +900,27 @@ function openSynopsis(romanTitle, displayTitle, language) {
       });
   }
 
-  function searchAndPick(query, preferLang) {
-    return fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=8&format=json&origin=*`)
+  // Search Wikipedia using the language-prefixed query, take the top result
+  function searchAndShow(query) {
+    return fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=1&format=json&origin=*`)
       .then(r => r.json())
       .then(data => {
         const results = (data.query && data.query.search) || [];
         if (!results.length) throw new Error('no results');
-
-        let best;
-        if (preferLang) {
-          // Non-English: prefer result with language name in title
-          best =
-            results.find(r => r.title.toLowerCase() === titleLower + ' (' + langLower + ' film)') ||
-            results.find(r => r.title.toLowerCase().startsWith(titleLower) && r.title.toLowerCase().includes(langLower)) ||
-            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\(\d{4} film\)/i.test(r.title)) ||
-            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\bfilm\b/i.test(r.title)) ||
-            results[0];
-        } else {
-          // English: original proven logic
-          best =
-            results.find(r => r.title.toLowerCase() === titleLower + ' (film)') ||
-            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\(\d{4} film\)/i.test(r.title)) ||
-            results.find(r => r.title.toLowerCase().startsWith(titleLower) && /\bfilm\b/i.test(r.title)) ||
-            results.find(r => r.title.toLowerCase() === titleLower) ||
-            results[0];
-        }
-        return showSummary(best.title);
+        return showSummary(results[0].title);
       });
   }
 
-  const fallbackUrl = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(romanTitle + ' ' + lang + ' film').trim()}&title=Special:Search`;
+  const fallbackUrl = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(searchQuery)}&title=Special:Search`;
 
   function fail() {
     synLink.href = fallbackUrl;
     synBody.innerHTML = `
       <p style="color:var(--muted);margin-bottom:12px">Could not load synopsis automatically.</p>
-      <p><a href="${fallbackUrl}" target="_blank" style="color:var(--accent)">Search Wikipedia for "${escHtml(romanTitle)}" →</a></p>`;
+      <p><a href="${fallbackUrl}" target="_blank" style="color:var(--accent)">Search Wikipedia for "${escHtml(searchQuery)}" →</a></p>`;
   }
 
-  if (isEnglish) {
-    // English: try "(film)" page directly first, then search
-    showSummary(romanTitle + ' (film)')
-      .catch(() => searchAndPick(romanTitle + ' film', false))
-      .catch(fail);
-  } else {
-    // Non-English: try exact "(language film)" page first, then language-biased search
-    showSummary(romanTitle + ' (' + lang + ' film)')
-      .catch(() => searchAndPick(romanTitle + ' ' + lang + ' film', true))
-      .catch(() => searchAndPick(romanTitle + ' film', true))
-      .catch(fail);
-  }
+  searchAndShow(searchQuery).catch(fail);
 }
 
 // ── Title HTML builder — wraps title in clickable span ────────────────────────
