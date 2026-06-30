@@ -879,11 +879,29 @@ function openSynopsis(romanTitle, displayTitle, language) {
   const lang = (language || '').trim();
   const isEnglish = !lang || lang.toLowerCase() === 'english';
 
-  // Search query format: "Language film MovieName" e.g. "Marathi film Natsamrat"
-  // For English: "film MovieName" (no language prefix needed)
+  // Strip series suffixes to get clean base title for Wikipedia search.
+  // Only strips these EXACT formats:
+  //   "String - #"            e.g. "Die Hard - 2", "Rambo - 3"
+  //   "String - Roman"        e.g. "God Father - II", "Back to the Future - III"
+  //   "String # & #"          e.g. "Band of Brothers 3 & 4", "Life 1 & 2"
+  // Does NOT strip plain trailing numbers without a dash: "Die Hard 2" stays as-is
+  function cleanTitle(t) {
+    return t
+      // "String - Roman numeral" e.g. "God Father - II"
+      .replace(/\s+-\s+(I{1,3}|IV|VI{0,3}|IX|XI{0,3}|XIV|XV|XVI{0,3})$/i, '')
+      // "String - #" e.g. "Rambo - 3", "Fast and Furious - 4"
+      .replace(/\s+-\s+\d+$/, '')
+      // "String # & #" e.g. "Band of Brothers 3 & 4"
+      .replace(/\s+\d+\s*&\s*\d+$/, '')
+      .trim();
+  }
+
+  const searchTitle = cleanTitle(romanTitle);
+
+  // Search query: "Language film CleanTitle"
   const searchQuery = isEnglish
-    ? `film ${romanTitle}`
-    : `${lang} film ${romanTitle}`;
+    ? `film ${searchTitle}`
+    : `${lang} film ${searchTitle}`;
 
   function showSummary(pageTitle) {
     return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`)
@@ -900,7 +918,6 @@ function openSynopsis(romanTitle, displayTitle, language) {
       });
   }
 
-  // Search Wikipedia using the language-prefixed query, take the top result
   function searchAndShow(query) {
     return fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=1&format=json&origin=*`)
       .then(r => r.json())
