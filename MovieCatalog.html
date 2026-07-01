@@ -811,8 +811,8 @@ const NATIVE_TITLES = {
   // Hindi
   '3 idiots': '३ इडियट्स',
   'agneepath (2012)': 'अग्निपथ (२०१२)',
-  'bahubali - the beginning': 'बाहुबली - द बिगिनिंग',
-  'bahubali - the conslusion': 'बाहुबली - द कन्क्लूज़न',
+  'bahubali: the beginning': 'बाहुबली: द बिगिनिंग',
+  'bahubali 2: the conslusion': 'बाहुबली २: द कन्क्लूज़न',
   'bajirao mastani': 'बाजीराव मस्तानी',
   'chennai express': 'चेन्नई एक्सप्रेस',
   'dhoom': 'धूम',
@@ -823,6 +823,7 @@ const NATIVE_TITLES = {
   'hum tum': 'हम तुम',
   'kabhi alvida naa kehna': 'कभी अलविदा ना कहना',
   'krish': 'क्रिश्',
+  'manjhi': 'मांझी',
   'mary kom': 'मैरी कॉम',
   'mera naam joker': 'मेरा नाम जोकर',
   'mohenjo daro': 'मोहेंजो दारो',
@@ -845,6 +846,7 @@ const NATIVE_TITLES = {
   'killa': 'किल्ला',
   'lai bhaari': 'लई भारी',
   'lokmanya - ek yugapurush': 'लोकमान्य - एक युगपुरुष',
+  'mee shivajiraje bhosale boltoy': 'मी शिवाजीराजे भोसले बोलतोय',
   'natarang': 'नटरंग',
   'natsamrat': 'नटसम्राट',
   'umbartha': 'उंबरठा',
@@ -900,8 +902,8 @@ function openSynopsis(romanTitle, displayTitle, language) {
 
   // Search query: "Language film CleanTitle"
   const searchQuery = isEnglish
-    ? `film ${searchTitle}`
-    : `${lang} film ${searchTitle}`;
+    ? `film "${searchTitle}"`
+    : `${lang} film "${searchTitle}"`;
 
   function showSummary(pageTitle) {
     return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`)
